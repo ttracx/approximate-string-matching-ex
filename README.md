@@ -1,4 +1,4 @@
-# Approximate String Matching - Extended
+# Approximate String Matching VBO - Extended
 Integration uses algorithms to compare different text strings to identify matches and intelligently decide if text is correct or as expected.
 
 ## About
