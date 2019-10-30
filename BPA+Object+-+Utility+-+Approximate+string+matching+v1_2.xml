@@ -1,0 +1,1000 @@
+﻿<process name="Utility - Approximate string matching" version="1.1" bpversion="6.5.0.12573" narrative="Fuzzy matching object" byrefcollection="true" type="object" runmode="Exclusive" preferredid="16fd5721-6905-4533-ae53-02f5dd2b7d14">
+  <appdef>
+    <element name="Application Root">
+      <id>461ee7c1-7acc-4f6a-b55a-20c153762e71</id>
+      <type>Application</type>
+      <basetype>Application</basetype>
+      <datatype>unknown</datatype>
+      <diagnose>False</diagnose>
+    </element>
+  </appdef>
+  <view>
+    <camerax>0</camerax>
+    <cameray>0</cameray>
+    <zoom version="2">1.25</zoom>
+  </view>
+  <preconditions />
+  <endpoint narrative="" />
+  <subsheet subsheetid="c706b0b9-e443-4f68-aec8-8592a8bddab4" type="CleanUp" published="True">
+    <name>Clean Up</name>
+    <view>
+      <camerax>0</camerax>
+      <cameray>0</cameray>
+      <zoom version="2">1.25</zoom>
+    </view>
+  </subsheet>
+  <subsheet subsheetid="af72a1ff-b2ec-40c6-8cf5-867acd5443f6" type="Normal" published="True">
+    <name>Jaro-Winkler distance</name>
+    <view>
+      <camerax>0</camerax>
+      <cameray>0</cameray>
+      <zoom version="2">1.25</zoom>
+    </view>
+  </subsheet>
+  <subsheet subsheetid="0e7f8140-ebea-4dcd-875d-bcd09cf9eea2" type="Normal" published="True">
+    <name>Select Best Match from Collection using Jaro-Winkler</name>
+    <view>
+      <camerax>27</camerax>
+      <cameray>3</cameray>
+      <zoom version="2">1.25</zoom>
+    </view>
+  </subsheet>
+  <subsheet subsheetid="96561cc0-fe7f-4834-acd0-c70b41517480" type="Normal" published="True">
+    <name>Levenshtein distance</name>
+    <view>
+      <camerax>0</camerax>
+      <cameray>0</cameray>
+      <zoom version="2">1.25</zoom>
+    </view>
+  </subsheet>
+  <stage stageid="7d460d0d-2fce-40be-817d-cebd1517253c" name="Start" type="Start">
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>-105</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <onsuccess>b3e079da-ddcf-437f-8d86-6fcecaafc933</onsuccess>
+  </stage>
+  <stage stageid="b3e079da-ddcf-437f-8d86-6fcecaafc933" name="End" type="End">
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>90</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+  </stage>
+  <stage stageid="442d77c7-fcf7-4ba7-9e6f-a4201a7cb371" name="Stage1" type="ProcessInfo">
+    <narrative>
+    </narrative>
+    <displayx>-195</displayx>
+    <displayy>-105</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>90</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <references>
+      <reference>System.Data.dll</reference>
+      <reference>System.Xml.dll</reference>
+      <reference>System.Drawing.dll</reference>
+    </references>
+    <imports>
+      <import>System</import>
+      <import>System.Drawing</import>
+    </imports>
+    <language>visualbasic</language>
+    <globalcode><![CDATA[]]></globalcode>
+    <code><![CDATA['Public NotInheritable Class JaroWinklerDistance
+'	Private Sub New()
+'	End Sub
+	' The Winkler modification will not be applied unless the 
+	'     * percent match was at or above the mWeightThreshold percent 
+	'     * without the modification. 
+	'     * Winkler's paper used a default value of 0.7
+	'     
+
+	Private Shared ReadOnly mWeightThreshold As Double = 0.7
+
+	' Size of the prefix to be concidered by the Winkler modification. 
+	'     * Winkler's paper used a default value of 4'     
+
+	Private Shared ReadOnly mNumChars As Integer = 4
+
+
+	''' <summary>
+	''' Returns the Jaro-Winkler distance between the specified  
+	''' strings. The distance is symmetric and will fall in the 
+	''' range 0 (perfect match) to 1 (no match). 
+	''' </summary>
+	''' <param name="aString1">First String</param>
+	''' <param name="aString2">Second String</param>
+	''' <returns></returns>
+	Private Shared Function distance(aString1 As String, aString2 As String) As Double
+		Return 1.0 - proximity(aString1, aString2)
+	End Function
+
+
+	''' <summary>
+	''' Returns the Jaro-Winkler distance between the specified  
+	''' strings. The distance is symmetric and will fall in the 
+	''' range 0 (no match) to 1 (perfect match). 
+	''' </summary>
+	''' <param name="aString1">First String</param>
+	''' <param name="aString2">Second String</param>
+	''' <returns></returns>
+	Private Shared Function proximity(aString1 As String, aString2 As String) As Double
+		Dim lLen1 As Integer = aString1.Length
+		Dim lLen2 As Integer = aString2.Length
+		If lLen1 = 0 Then
+			If lLen2 = 0 Then
+				Return 1
+			Else
+				Return 0
+            End If
+		End If
+
+		Dim lSearchRange As Integer = Math.Max(0, Math.Max(lLen1, lLen2) / 2 - 1)
+
+		' default initialized to false
+		Dim lMatched1 As Boolean() = New Boolean(lLen1 - 1) {}
+		Dim lMatched2 As Boolean() = New Boolean(lLen2 - 1) {}
+
+		Dim lNumCommon As Integer = 0
+		For i As Integer = 0 To lLen1 - 1
+			Dim lStart As Integer = Math.Max(0, i - lSearchRange)
+			Dim lEnd As Integer = Math.Min(i + lSearchRange + 1, lLen2)
+			For j As Integer = lStart To lEnd - 1
+				If lMatched2(j) Then
+					Continue For
+				End If
+				If aString1(i) <> aString2(j) Then
+					Continue For
+				End If
+				lMatched1(i) = True
+				lMatched2(j) = True
+				lNumCommon += 1
+				Exit For
+			Next
+		Next
+		If lNumCommon = 0 Then
+			Return 0.0
+		End If
+
+		Dim lNumHalfTransposed As Integer = 0
+		Dim k As Integer = 0
+		For i As Integer = 0 To lLen1 - 1
+			If Not lMatched1(i) Then
+				Continue For
+			End If
+			While Not lMatched2(k)
+				k += 1
+			End While
+			If aString1(i) <> aString2(k) Then
+				lNumHalfTransposed += 1
+			End If
+			k += 1
+		Next
+		' System.Diagnostics.Debug.WriteLine("numHalfTransposed=" + numHalfTransposed);
+		Dim lNumTransposed As Integer = lNumHalfTransposed / 2
+
+		' System.Diagnostics.Debug.WriteLine("numCommon=" + numCommon + " numTransposed=" + numTransposed);
+		Dim lNumCommonD As Double = lNumCommon
+		Dim lWeight As Double = (lNumCommonD / lLen1 + lNumCommonD / lLen2 + (lNumCommon - lNumTransposed) / lNumCommonD) / 3.0
+
+		If lWeight <= mWeightThreshold Then
+			Return lWeight
+		End If
+		Dim lMax As Integer = Math.Min(mNumChars, Math.Min(aString1.Length, aString2.Length))
+		Dim lPos As Integer = 0
+		While lPos < lMax AndAlso aString1(lPos) = aString2(lPos)
+			lPos += 1
+		End While
+		If lPos = 0 Then
+			Return lWeight
+		End If
+		Return lWeight + 0.1 * lPos * (1.0 - lWeight)
+
+	End Function
+
+
+'End Class]]></code>
+  </stage>
+  <stage stageid="0722542a-0811-4ac4-9781-bd19a26b6fbb" name="Clean Up" type="SubSheetInfo">
+    <subsheetid>c706b0b9-e443-4f68-aec8-8592a8bddab4</subsheetid>
+    <narrative>
+    </narrative>
+    <displayx>-195</displayx>
+    <displayy>-105</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>90</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+  </stage>
+  <stage stageid="6e9e68a7-e8f7-4f0b-b2e5-45e52be7e790" name="Start" type="Start">
+    <subsheetid>c706b0b9-e443-4f68-aec8-8592a8bddab4</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>-105</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <onsuccess>49918a7a-d048-44f0-bf7d-38d462df04e1</onsuccess>
+  </stage>
+  <stage stageid="49918a7a-d048-44f0-bf7d-38d462df04e1" name="End" type="End">
+    <subsheetid>c706b0b9-e443-4f68-aec8-8592a8bddab4</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>90</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+  </stage>
+  <stage stageid="121adbb9-8edd-4b46-a16b-6b400b50b38e" name="Jaro-Winkler distance" type="SubSheetInfo">
+    <subsheetid>af72a1ff-b2ec-40c6-8cf5-867acd5443f6</subsheetid>
+    <narrative>Returns Jaro-Winkler distance score, a n umber between 1 if perfect match and 0 if no match at all</narrative>
+    <displayx>-195</displayx>
+    <displayy>-150</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>90</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+  </stage>
+  <stage stageid="397dc543-cfba-4d52-825c-69992d978f7b" name="Start" type="Start">
+    <subsheetid>af72a1ff-b2ec-40c6-8cf5-867acd5443f6</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>-105</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <inputs>
+      <input type="text" name="Text to Match 1" narrative="The first text to compare" stage="Text to Match 1" />
+      <input type="text" name="Text to Match 2" narrative="The second text to compare" stage="Text to Match 2" />
+      <input type="flag" name="Ignore Case?" narrative="If true than ignore case differences" stage="Ignore Case?" />
+    </inputs>
+    <onsuccess>39dddbec-d943-4151-ac0f-7f395e7f0f1b</onsuccess>
+  </stage>
+  <stage stageid="aaca5e2c-70e7-46d2-97d0-a3883869a87e" name="End" type="End">
+    <subsheetid>af72a1ff-b2ec-40c6-8cf5-867acd5443f6</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>60</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <outputs>
+      <output type="number" name="Jaro-Winkler Distance" narrative="Score between 1 = Perfect Match to 0 = Total Mismatch" stage="Comparison Result" />
+    </outputs>
+  </stage>
+  <stage stageid="d1b5fee4-6d83-4cd6-ab2b-804b68927828" name="new" type="Note">
+    <subsheetid>c706b0b9-e443-4f68-aec8-8592a8bddab4</subsheetid>
+    <narrative>Clean Up Page
+
+This is an optional page where you might choose to perform some finalisation (or "cleanup") tasks as your business object is closed down.
+
+The cleanup action will be called automatically immediately after closing your business object at the end of a business process.
+
+You will not be able to call this action from a business process, nor will it be called at any other time than before the disposal of the business object.</narrative>
+    <displayx>-180</displayx>
+    <displayy>60</displayy>
+    <displaywidth>180</displaywidth>
+    <displayheight>230</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+  </stage>
+  <stage stageid="6e39d210-6197-4256-a15c-59ddddbef6bb" name="new" type="Note">
+    <narrative>Initialise Page
+
+This is an optional page where you might choose to perform some initialisation tasks after your business object is loaded.
+
+The initialise action will be called automatically immediately after loading your business object.
+
+You will not be able to call this action from a business process, nor will it be called at any other time than after the creation of the object.</narrative>
+    <displayx>-180</displayx>
+    <displayy>60</displayy>
+    <displaywidth>180</displaywidth>
+    <displayheight>230</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+  </stage>
+  <stage stageid="39dddbec-d943-4151-ac0f-7f395e7f0f1b" name="Compare" type="Code">
+    <subsheetid>af72a1ff-b2ec-40c6-8cf5-867acd5443f6</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>-30</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <inputs>
+      <input type="text" name="Text A" expr="[Text to Match 1]" />
+      <input type="text" name="Text B" expr="[Text to Match 2]" />
+      <input type="flag" name="IgnoreCase" expr="[Ignore Case?]" />
+    </inputs>
+    <outputs>
+      <output type="text" name="Comparison Result" stage="Comparison Result" />
+    </outputs>
+    <onsuccess>aaca5e2c-70e7-46d2-97d0-a3883869a87e</onsuccess>
+    <code><![CDATA[	'Public Shared Function distance(aString1 As String, aString2 As String) As Double
+If (IgnoreCase = True) Then
+	Comparison_Result = proximity(Text_A.ToUpper(), Text_B.ToUpper())
+Else
+	Comparison_Result = proximity(Text_A,Text_B)
+End If]]></code>
+  </stage>
+  <stage stageid="e125af72-2115-4c3e-a6cd-8c6a65764c97" name="Comparison Result" type="Data">
+    <subsheetid>af72a1ff-b2ec-40c6-8cf5-867acd5443f6</subsheetid>
+    <narrative>
+    </narrative>
+    <displayx>-165</displayx>
+    <displayy>90</displayy>
+    <displaywidth>120</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>number</datatype>
+    <initialvalue>0</initialvalue>
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="bc0d0f38-f0a7-49e9-9f5a-bf16e868fd75" name="Select Best Match from Collection using Jaro-Winkler" type="SubSheetInfo">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <narrative>Uses the Jaro-Winkler distance to select the matching row.  If the two best rows are the same match distance than neither are selected.</narrative>
+    <displayx>-180</displayx>
+    <displayy>-195</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>90</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+  </stage>
+  <stage stageid="8a57ada0-953c-45d6-839a-2a289beb3a3e" name="Start" type="Start">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <preconditions>
+      <condition narrative="N/A" />
+    </preconditions>
+    <postconditions>
+      <condition narrative="N/A" />
+    </postconditions>
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>-105</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <inputs>
+      <input type="collection" name="Text Candidates" narrative="A collection of texts that you want to find the match in" stage="Text Candidates" />
+      <input type="text" name="Text to Find" narrative="The text you want to find the best match for" stage="Text to Find" />
+      <input type="flag" name="Ignore Case?" narrative="Set to true to ignore case differences" stage="Ignore Case?" />
+      <input type="number" name="Jaro-Winkler Distance Threshold" narrative="Defaults to 0.9. The distance over which to accept matches" stage="Jaro-Winkler Distance Threshold" />
+    </inputs>
+    <onsuccess>fbf37c6e-f0b6-4c7d-b25d-915cd83a997e</onsuccess>
+  </stage>
+  <stage stageid="e07e6741-aa4b-47bb-87ae-34bf5d0c5125" name="End" type="End">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>405</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <outputs>
+      <output type="flag" name="Match Found?" narrative="True if match is found, false if not" stage="Match Found" />
+      <output type="text" name="Best Match Text" narrative="The full text value of the best matched cell" stage="Best Match Text" />
+      <output type="number" name="Best Match Row" narrative="The collection row number of the best matched value" stage="Best Match Row" />
+      <output type="number" name="Best Match JW Distance" narrative="The JW distance value of the best matched value" stage="Best Match JW Distance" />
+      <output type="number" name="Duplicate Best JW Distance" narrative="If there were multiple best match values, this will contain the JW distance of all equal best matches" stage="Duplicate Best JW Distance" />
+    </outputs>
+  </stage>
+  <stage stageid="e0d8633b-85ae-4015-84c9-c323730d24dc" name="Text Candidates" type="Collection">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>-180</displayx>
+    <displayy>-75</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>60</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>collection</datatype>
+    <private />
+    <alwaysinit />
+    <collectioninfo>
+      <field name="Text Candidate" type="text" />
+    </collectioninfo>
+  </stage>
+  <stage stageid="ab6eab02-e3ac-4ed5-8ee8-00fab26922e7" name="Text to Find" type="Data">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>-180</displayx>
+    <displayy>-15</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>60</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>text</datatype>
+    <initialvalue />
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="84c5899e-b787-4242-b1cc-1dd429e10528" name="Text to Match 1" type="Data">
+    <subsheetid>af72a1ff-b2ec-40c6-8cf5-867acd5443f6</subsheetid>
+    <narrative>
+    </narrative>
+    <displayx>-165</displayx>
+    <displayy>-45</displayy>
+    <displaywidth>120</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>text</datatype>
+    <initialvalue />
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="b664b6e5-cc09-4369-a38b-65e87b9f8c23" name="Text to Match 2" type="Data">
+    <subsheetid>af72a1ff-b2ec-40c6-8cf5-867acd5443f6</subsheetid>
+    <narrative>
+    </narrative>
+    <displayx>-165</displayx>
+    <displayy>-15</displayy>
+    <displaywidth>120</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>text</datatype>
+    <initialvalue />
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="16cbe067-750d-46a2-a61b-1ad640b6ad2e" name="Ignore Case?" type="Data">
+    <subsheetid>af72a1ff-b2ec-40c6-8cf5-867acd5443f6</subsheetid>
+    <narrative>
+    </narrative>
+    <displayx>-165</displayx>
+    <displayy>15</displayy>
+    <displaywidth>120</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>flag</datatype>
+    <initialvalue>False</initialvalue>
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="628a2423-44b8-4a19-9d09-e98e71dffeec" name="Note1" type="Note">
+    <subsheetid>af72a1ff-b2ec-40c6-8cf5-867acd5443f6</subsheetid>
+    <loginhibit />
+    <narrative>Inputs</narrative>
+    <displayx>-165</displayx>
+    <displayy>-75</displayy>
+    <displaywidth>120</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Bold" color="000000" />
+  </stage>
+  <stage stageid="efc6cac4-476e-4485-9be5-fc560d05d545" name="Note1" type="Note">
+    <subsheetid>af72a1ff-b2ec-40c6-8cf5-867acd5443f6</subsheetid>
+    <loginhibit />
+    <narrative>Outputs</narrative>
+    <displayx>-165</displayx>
+    <displayy>60</displayy>
+    <displaywidth>120</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Bold" color="000000" />
+  </stage>
+  <stage stageid="c71631b3-8e54-47aa-ad84-58e1bd124802" name="Note1" type="Note">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>Inputs</narrative>
+    <displayx>-180</displayx>
+    <displayy>-120</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Bold" color="000000" />
+  </stage>
+  <stage stageid="5ca36663-e220-4b88-8002-80694ec78e48" name="Note1" type="Note">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>Outputs</narrative>
+    <displayx>-180</displayx>
+    <displayy>165</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Bold" color="000000" />
+  </stage>
+  <stage stageid="835ce2d5-83f3-4454-b1c9-cc9e7f4d207e" name="Best Match Text" type="Data">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>-180</displayx>
+    <displayy>225</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>text</datatype>
+    <initialvalue />
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="e5376630-8377-4d53-8c25-91d53940f58a" name="Best Match Row" type="Data">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>-180</displayx>
+    <displayy>255</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>number</datatype>
+    <initialvalue />
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="92b3e9ec-4640-4ed3-ad9a-55f1b7f46365" name="Match Found" type="Data">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>-180</displayx>
+    <displayy>195</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>flag</datatype>
+    <initialvalue>False</initialvalue>
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="1d0149d0-c197-4fb8-ae77-03516090b836" name="Jaro-Winkler Distance Threshold" type="Data">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>-180</displayx>
+    <displayy>75</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>60</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>number</datatype>
+    <initialvalue>0.85</initialvalue>
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="b3aa1124-cb5b-4abd-be2f-c5877baf611f" name="Ignore Case?" type="Data">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <narrative>
+    </narrative>
+    <displayx>-180</displayx>
+    <displayy>30</displayy>
+    <displaywidth>120</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>flag</datatype>
+    <initialvalue>False</initialvalue>
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="fbf37c6e-f0b6-4c7d-b25d-915cd83a997e" name="Text Candidates" type="LoopStart">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>-45</displayy>
+    <displaywidth>90</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <onsuccess>c719bf46-07c4-429f-9916-aa13ebfe9615</onsuccess>
+    <groupid>7b3b44c0-7108-4dcf-ab7a-7862bb666127</groupid>
+    <looptype>ForEach</looptype>
+    <loopdata>Text Candidates</loopdata>
+  </stage>
+  <stage stageid="efe8c03c-c4b6-4908-9ece-39511dd49a94" name="Text Candidates" type="LoopEnd">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>345</displayy>
+    <displaywidth>90</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <onsuccess>e07e6741-aa4b-47bb-87ae-34bf5d0c5125</onsuccess>
+    <groupid>7b3b44c0-7108-4dcf-ab7a-7862bb666127</groupid>
+  </stage>
+  <stage stageid="41f8e349-85c7-42d9-bbbb-ff3ec675c2ee" name="Jaro-Winkler distance" type="SubSheet">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>60</displayy>
+    <displaywidth>90</displaywidth>
+    <displayheight>60</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <inputs>
+      <input type="text" name="Text to Match 1" narrative="The first text to compare" expr="[Text Candidates.Text Candidate]" />
+      <input type="text" name="Text to Match 2" narrative="The second text to compare" expr="[Text to Find]" />
+      <input type="flag" name="Ignore Case?" narrative="If true than ignore case differences" expr="[Ignore Case?]" />
+    </inputs>
+    <outputs>
+      <output type="number" name="Jaro-Winkler Distance" narrative="Score between 1 = Perfect Match to 0 = Total Mismatch" stage="This Jaro-Winkler Distance" />
+    </outputs>
+    <onsuccess>b0b06dc9-da9a-4d45-9d42-8ddd63f2a651</onsuccess>
+    <processid>af72a1ff-b2ec-40c6-8cf5-867acd5443f6</processid>
+  </stage>
+  <stage stageid="1044e85c-0e99-47e9-a57e-389a40e4bdaf" name="This Jaro-Winkler Distance" type="Data">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <narrative>
+    </narrative>
+    <displayx>150</displayx>
+    <displayy>60</displayy>
+    <displaywidth>120</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>number</datatype>
+    <initialvalue />
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="d86ce4b0-170b-4198-b087-76f06b948d59" name="Best Match JW Distance" type="Data">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>-180</displayx>
+    <displayy>285</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>number</datatype>
+    <initialvalue>0</initialvalue>
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="b0b06dc9-da9a-4d45-9d42-8ddd63f2a651" name="Best Result?" type="Decision">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>135</displayy>
+    <displaywidth>90</displaywidth>
+    <displayheight>60</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <decision expression="[This Jaro-Winkler Distance]&gt;=[Jaro-Winkler Distance Threshold] AND [This Jaro-Winkler Distance]&gt;=[Best Match JW Distance] AND [This Jaro-Winkler Distance]&gt;[Duplicate Best JW Distance]" />
+    <ontrue>706133eb-c9a9-4535-bd97-ac808baa522c</ontrue>
+    <onfalse>a8162ddf-ab41-443d-9071-afa28961f45c</onfalse>
+  </stage>
+  <stage stageid="f90050af-9010-493e-a0f0-663b3e3d7606" name="Save Best" type="MultipleCalculation">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>285</displayy>
+    <displaywidth>90</displaywidth>
+    <displayheight>60</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <onsuccess>efe8c03c-c4b6-4908-9ece-39511dd49a94</onsuccess>
+    <steps>
+      <calculation expression="True" stage="Match Found" />
+      <calculation expression="[Text Candidates.Text Candidate]" stage="Best Match Text" />
+      <calculation expression="[This Row]" stage="Best Match Row" />
+      <calculation expression="[This Jaro-Winkler Distance]" stage="Best Match JW Distance" />
+      <calculation expression="0" stage="Duplicate Best JW Distance" />
+    </steps>
+  </stage>
+  <stage stageid="706133eb-c9a9-4535-bd97-ac808baa522c" name="Same as previous Best?" type="Decision">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>210</displayy>
+    <displaywidth>90</displaywidth>
+    <displayheight>60</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <decision expression="[This Jaro-Winkler Distance]=[Best Match JW Distance]" />
+    <ontrue>b8076b5b-1a9c-4053-9d31-f6533944f60b</ontrue>
+    <onfalse>f90050af-9010-493e-a0f0-663b3e3d7606</onfalse>
+  </stage>
+  <stage stageid="c949ee42-a671-4ad3-9a38-80cc80fd3dab" name="Duplicate Best JW Distance" type="Data">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>225</displayx>
+    <displayy>315</displayy>
+    <displaywidth>120</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>number</datatype>
+    <initialvalue>0</initialvalue>
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="a8162ddf-ab41-443d-9071-afa28961f45c" name="anchor1" type="Anchor">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>-60</displayx>
+    <displayy>135</displayy>
+    <displaywidth>10</displaywidth>
+    <displayheight>10</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <onsuccess>913dc9e7-603a-40a9-b970-f9a7a5d2b4fc</onsuccess>
+  </stage>
+  <stage stageid="913dc9e7-603a-40a9-b970-f9a7a5d2b4fc" name="anchor2" type="Anchor">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>-60</displayx>
+    <displayy>345</displayy>
+    <displaywidth>10</displaywidth>
+    <displayheight>10</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <onsuccess>efe8c03c-c4b6-4908-9ece-39511dd49a94</onsuccess>
+  </stage>
+  <stage stageid="83f73636-1056-4c2c-be40-18ac12607e81" name="This Row" type="Data">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>150</displayx>
+    <displayy>0</displayy>
+    <displaywidth>120</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>number</datatype>
+    <initialvalue>0</initialvalue>
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="c719bf46-07c4-429f-9916-aa13ebfe9615" name="Inc This Row" type="Calculation">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>0</displayy>
+    <displaywidth>90</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <onsuccess>41f8e349-85c7-42d9-bbbb-ff3ec675c2ee</onsuccess>
+    <calculation expression="[This Row]+1" stage="This Row" />
+  </stage>
+  <stage stageid="b8076b5b-1a9c-4053-9d31-f6533944f60b" name="Remove Best" type="MultipleCalculation">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>135</displayx>
+    <displayy>210</displayy>
+    <displaywidth>90</displaywidth>
+    <displayheight>60</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <onsuccess>46666d74-296c-4324-903a-0b877d0779b9</onsuccess>
+    <steps>
+      <calculation expression="False" stage="Match Found" />
+      <calculation expression="&quot;&quot;" stage="Best Match Text" />
+      <calculation expression="0" stage="Best Match Row" />
+      <calculation expression="0" stage="Best Match JW Distance" />
+      <calculation expression="[This Jaro-Winkler Distance]" stage="Duplicate Best JW Distance" />
+    </steps>
+  </stage>
+  <stage stageid="46666d74-296c-4324-903a-0b877d0779b9" name="anchor3" type="Anchor">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>135</displayx>
+    <displayy>345</displayy>
+    <displaywidth>10</displaywidth>
+    <displayheight>10</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <onsuccess>efe8c03c-c4b6-4908-9ece-39511dd49a94</onsuccess>
+  </stage>
+  <stage stageid="4d6fce30-91d0-4f4b-bf0f-8be6d004c942" name="Test Collection" type="Collection">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>285</displayx>
+    <displayy>-105</displayy>
+    <displaywidth>150</displaywidth>
+    <displayheight>60</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>collection</datatype>
+    <private />
+    <alwaysinit />
+    <collectioninfo>
+      <field name="Text Candidate" type="text" />
+    </collectioninfo>
+    <initialvalue>
+      <row>
+        <field name="Text Candidate" type="text" value="Obviously the incorrect row" />
+      </row>
+      <row>
+        <field name="Text Candidate" type="text" value="And again obviously not the row we want" />
+      </row>
+      <row>
+        <field name="Text Candidate" type="text" value="Hello - this is the text we want2" />
+      </row>
+      <row>
+        <field name="Text Candidate" type="text" value="No" />
+      </row>
+      <row>
+        <field name="Text Candidate" type="text" value="Amost Hello - this is the text we want" />
+      </row>
+      <row>
+        <field name="Text Candidate" type="text" value="Hello - this is the text we wanted" />
+      </row>
+      <row>
+        <field name="Text Candidate" type="text" value="And again obviously not the row we want" />
+      </row>
+    </initialvalue>
+  </stage>
+  <stage stageid="d0a4b764-c1f1-4626-9966-aa84e8e6f481" name="Test Data" type="MultipleCalculation">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>135</displayx>
+    <displayy>-120</displayy>
+    <displaywidth>120</displaywidth>
+    <displayheight>60</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <onsuccess>fbf37c6e-f0b6-4c7d-b25d-915cd83a997e</onsuccess>
+    <steps>
+      <calculation expression="[Test Collection]" stage="Text Candidates" />
+      <calculation expression="&quot;Hello - this is the text we want&quot;" stage="Text to Find" />
+      <calculation expression="True" stage="Ignore Case?" />
+    </steps>
+  </stage>
+  <stage stageid="d2d6aefa-c7c9-433f-8d0c-642352025066" name="Note2" type="Note">
+    <subsheetid>0e7f8140-ebea-4dcd-875d-bcd09cf9eea2</subsheetid>
+    <loginhibit />
+    <narrative>Note: The threshold you use will need experimentation and testing to confirm it is adequate for your use cases</narrative>
+    <displayx>-330</displayx>
+    <displayy>15</displayy>
+    <displaywidth>120</displaywidth>
+    <displayheight>180</displayheight>
+    <font family="Tahoma" size="10" style="Bold" color="FF0000" />
+  </stage>
+  <stage stageid="9f30f654-1bdd-4dc8-9205-afb16f5713ae" name="Levenshtein distance" type="SubSheetInfo">
+    <subsheetid>96561cc0-fe7f-4834-acd0-c70b41517480</subsheetid>
+    <narrative>The minimum number of single-character edits required to change one word into another.</narrative>
+    <displayx>-195</displayx>
+    <displayy>-105</displayy>
+    <displaywidth>180</displaywidth>
+    <displayheight>90</displayheight>
+    <font family="Segoe UI" size="10" style="Regular" color="000000" />
+  </stage>
+  <stage stageid="50cb5ba2-3d4b-43f3-8bb3-be42fb9dfd4e" name="Start" type="Start">
+    <subsheetid>96561cc0-fe7f-4834-acd0-c70b41517480</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>-105</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <inputs>
+      <input type="text" name="Text1" narrative="The first of the two pieces of text to be compared" stage="Text1" />
+      <input type="text" name="Text2" narrative="The second of the two pieces of text to be compared" stage="Text2" />
+    </inputs>
+    <onsuccess>f6364ae2-91e6-4dbf-bb2b-fe8116013967</onsuccess>
+  </stage>
+  <stage stageid="6006892a-2208-4785-8d56-3fe4abdf27af" name="End" type="End">
+    <subsheetid>96561cc0-fe7f-4834-acd0-c70b41517480</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>90</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <outputs>
+      <output type="number" name="Levenshtein Distance" narrative="A score, indicating the similarity (or &quot;edit distance&quot;) between the two supplied pieces of text" stage="Levenshtein Distance" />
+    </outputs>
+  </stage>
+  <stage stageid="f6364ae2-91e6-4dbf-bb2b-fe8116013967" name="Levenshtein Comparison" type="Code">
+    <subsheetid>96561cc0-fe7f-4834-acd0-c70b41517480</subsheetid>
+    <loginhibit />
+    <narrative>
+    </narrative>
+    <displayx>15</displayx>
+    <displayy>0</displayy>
+    <displaywidth>90</displaywidth>
+    <displayheight>60</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <inputs>
+      <input type="text" name="Text1" expr="[Text1]" />
+      <input type="text" name="Text2" expr="[Text2]" />
+    </inputs>
+    <outputs>
+      <output type="number" name="Levenshtein Distance" stage="Levenshtein Distance" />
+    </outputs>
+    <onsuccess>6006892a-2208-4785-8d56-3fe4abdf27af</onsuccess>
+    <code><![CDATA[
+Dim d As Integer(,) = New Integer(Text1.Length, Text2.Length) {}
+For i As Integer = 0 To Text1.Length
+	d(i, 0) = i
+Next
+For j As Integer = 0 To Text2.Length
+	d(0, j) = j
+Next
+For j As Integer = 1 To Text2.Length
+	For i As Integer = 1 To Text1.Length
+		If Text1(i - 1) = Text2(j - 1) Then
+			d(i, j) = d(i - 1, j - 1)
+		Else
+			'no operation
+			'a deletion
+			'an insertion
+				'a substitution
+			d(i, j) = Math.Min(Math.Min(d(i - 1, j) + 1, d(i, j - 1) + 1), d(i - 1, j - 1) + 1)
+		End If
+	Next
+Next
+
+Levenshtein_Distance = d(Text1.Length, Text2.Length)
+]]></code>
+  </stage>
+  <stage stageid="be3f511b-6683-41ce-9cfb-28329f0e0f55" name="Levenshtein Distance" type="Data">
+    <subsheetid>96561cc0-fe7f-4834-acd0-c70b41517480</subsheetid>
+    <narrative>
+    </narrative>
+    <displayx>165</displayx>
+    <displayy>90</displayy>
+    <displaywidth>180</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>number</datatype>
+    <initialvalue />
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="19a2b823-e332-4e3e-92c4-97d9a165c70e" name="Text1" type="Data">
+    <subsheetid>96561cc0-fe7f-4834-acd0-c70b41517480</subsheetid>
+    <narrative>
+    </narrative>
+    <displayx>90</displayx>
+    <displayy>-105</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>text</datatype>
+    <initialvalue xml:space="preserve">kitten</initialvalue>
+    <private />
+    <alwaysinit />
+  </stage>
+  <stage stageid="d7700d20-f30a-4ca7-8640-3713a6aaca97" name="Text2" type="Data">
+    <subsheetid>96561cc0-fe7f-4834-acd0-c70b41517480</subsheetid>
+    <narrative>
+    </narrative>
+    <displayx>150</displayx>
+    <displayy>-105</displayy>
+    <displaywidth>60</displaywidth>
+    <displayheight>30</displayheight>
+    <font family="Tahoma" size="10" style="Regular" color="000000" />
+    <datatype>text</datatype>
+    <initialvalue xml:space="preserve">sitting</initialvalue>
+    <private />
+    <alwaysinit />
+  </stage>
+</process>
